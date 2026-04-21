@@ -1,0 +1,14 @@
+trigger: none
+
+stages:
+- stage: TestAgent
+  jobs:
+  - job: Test
+    pool:
+      name: Default
+      demands:
+        - Agent.Name -equals test-vm
+    steps:
+    - powershell: |
+        Write-Host "Running on: $env:COMPUTERNAME"
+        az account show
