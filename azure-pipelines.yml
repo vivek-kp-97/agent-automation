@@ -9,15 +9,12 @@ stages:
       demands:
         - Agent.Name -equals test-vm
 
-    variables:
-      AZURE_CLIENT_ID: $(AZURE_CLIENT_ID)
-      AZURE_CLIENT_SECRET: $(AZURE_CLIENT_SECRET)
-      AZURE_TENANT_ID: $(AZURE_TENANT_ID)
-      AZURE_SUBSCRIPTION_ID: $(AZURE_SUBSCRIPTION_ID)
-
     steps:
     - powershell: |
         Write-Host "Running on: $env:COMPUTERNAME"
+
+        # Debug (optional)
+        Write-Host "Client ID: $env:AZURE_CLIENT_ID"
 
         # Login using Service Principal
         az login --service-principal `
@@ -28,5 +25,6 @@ stages:
         # Set subscription
         az account set --subscription $env:AZURE_SUBSCRIPTION_ID
 
-        # Validate
+        # Verify
         az account show
+      displayName: "Login to Azure using SP"
