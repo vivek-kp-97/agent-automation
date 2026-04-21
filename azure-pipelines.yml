@@ -8,7 +8,25 @@ stages:
       name: Default
       demands:
         - Agent.Name -equals test-vm
+
+    variables:
+      AZURE_CLIENT_ID: $(AZURE_CLIENT_ID)
+      AZURE_CLIENT_SECRET: $(AZURE_CLIENT_SECRET)
+      AZURE_TENANT_ID: $(AZURE_TENANT_ID)
+      AZURE_SUBSCRIPTION_ID: $(AZURE_SUBSCRIPTION_ID)
+
     steps:
     - powershell: |
         Write-Host "Running on: $env:COMPUTERNAME"
+
+        # Login using Service Principal
+        az login --service-principal `
+          --username $env:AZURE_CLIENT_ID `
+          --password $env:AZURE_CLIENT_SECRET `
+          --tenant $env:AZURE_TENANT_ID
+
+        # Set subscription
+        az account set --subscription $env:AZURE_SUBSCRIPTION_ID
+
+        # Validate
         az account show
