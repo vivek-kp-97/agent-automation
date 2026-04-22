@@ -6,8 +6,6 @@ stages:
   - job: Test
     pool:
       name: Default
-      demands:
-        - Agent.Name -equals test-vm
 
     steps:
     - powershell: |
