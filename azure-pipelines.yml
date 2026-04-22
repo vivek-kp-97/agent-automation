@@ -10,19 +10,26 @@ stages:
     steps:
     - powershell: |
         Write-Host "Running on: $env:COMPUTERNAME"
-
-        # Debug (optional)
         Write-Host "Client ID: $env:AZURE_CLIENT_ID"
+
+        # Debug check
+        if (-not $env:AZURE_CLIENT_SECRET) {
+          throw "AZURE_CLIENT_SECRET is EMPTY ❌"
+        }
 
         # Login using Service Principal
         az login --service-principal `
           --username $env:AZURE_CLIENT_ID `
-          --password $env:AZURE_CLIENT_SECRET `
+          --password="$env:AZURE_CLIENT_SECRET" `
           --tenant $env:AZURE_TENANT_ID
 
-        # Set subscription
         az account set --subscription $env:AZURE_SUBSCRIPTION_ID
-
-        # Verify
         az account show
+
       displayName: "Login to Azure using SP"
+
+      env:   # 👈 THIS IS THE KEY FIX
+        AZURE_CLIENT_ID: $(AZURE_CLIENT_ID)
+        AZURE_CLIENT_SECRET: $(AZURE_CLIENT_SECRET)
+        AZURE_TENANT_ID: $(AZURE_TENANT_ID)
+        AZURE_SUBSCRIPTION_ID: $(AZURE_SUBSCRIPTION_ID)
