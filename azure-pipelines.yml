@@ -1,10 +1,7 @@
 trigger: none
 
 stages:
-
-# -------------------------
-# Stage 1: Start VM
-# -------------------------
+# Stage 1: Check and Start VM
 - stage: CheckVM
   jobs:
   - job: StartVM
@@ -48,9 +45,8 @@ stages:
         AZURE_TENANT_ID: $(AZURE_TENANT_ID)
         AZURE_SUBSCRIPTION_ID: $(AZURE_SUBSCRIPTION_ID)
 
-# -------------------------
-# Stage 2: Workload
-# -------------------------
+
+# Stage 2: Main workload for build and deploy
 - stage: RunPipeline
   dependsOn: CheckVM
   jobs:
@@ -62,9 +58,7 @@ stages:
     - powershell: |
         Write-Host "Worker Agent: $env:COMPUTERNAME"
 
-# -------------------------
-# Stage 3: Stop VM
-# -------------------------
+# Stage 3: Send shutdown signal o the VM
 - stage: ShutdownVM
   dependsOn: RunPipeline
   condition: always()
