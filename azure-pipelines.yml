@@ -1,18 +1,13 @@
 trigger: none
 
-variables:
-  VM_NAME: "<your-worker-vm-name>"
-  RESOURCE_GROUP: "<your-resource-group>"
-
 stages:
 
 # -------------------------
 # Stage 1: Start VM
 # -------------------------
 - stage: CheckVM
-  displayName: "Start Worker VM"
   jobs:
-  - job: CheckAndStart
+  - job: StartVM
     pool:
       name: Default
 
@@ -20,17 +15,20 @@ stages:
     - powershell: |
         Write-Host "Controller Agent: $env:COMPUTERNAME"
 
-        # Login
-        az login --service-principal --username $env:AZURE_CLIENT_ID --password="$env:AZURE_CLIENT_SECRET" --tenant $env:AZURE_TENANT_ID
-        az account set --subscription $env:AZURE_SUBSCRIPTION_ID
-
         $vmName = "$(VM_NAME)"
         $rg = "$(RESOURCE_GROUP)"
 
         Write-Host "VM: $vmName"
         Write-Host "RG: $rg"
 
-        # Correct status check
+        if (-not $vmName -or -not $rg) {
+          Write-Error "VM_NAME or RESOURCE_GROUP not set"
+          exit 1
+        }
+
+        az login --service-principal --username $env:AZURE_CLIENT_ID --password="$env:AZURE_CLIENT_SECRET" --tenant $env:AZURE_TENANT_ID
+        az account set --subscription $env:AZURE_SUBSCRIPTION_ID
+
         $status = az vm get-instance-view --name $vmName --resource-group $rg --query "instanceView.statuses[1].displayStatus" -o tsv
 
         Write-Host "Current Status: $status"
@@ -51,19 +49,18 @@ stages:
         AZURE_SUBSCRIPTION_ID: $(AZURE_SUBSCRIPTION_ID)
 
 # -------------------------
-# Stage 2: Build / Deploy
+# Stage 2: Workload
 # -------------------------
 - stage: RunPipeline
   dependsOn: CheckVM
   jobs:
-  - job: BuildAndDeploy
+  - job: Run
     pool:
       name: SHA
 
     steps:
     - powershell: |
         Write-Host "Worker Agent: $env:COMPUTERNAME"
-        Write-Host "Running build/test/deploy..."
 
 # -------------------------
 # Stage 3: Stop VM
