@@ -7,7 +7,7 @@ variables:
 stages:
 
 # -------------------------
-# Stage 1: Start Worker VM
+# Stage 1: Start VM
 # -------------------------
 - stage: CheckVM
   displayName: "Start Worker VM"
@@ -20,23 +20,22 @@ stages:
     - powershell: |
         Write-Host "Controller Agent: $env:COMPUTERNAME"
 
-        az login --service-principal `
-          --username $env:AZURE_CLIENT_ID `
-          --password="$env:AZURE_CLIENT_SECRET" `
-          --tenant $env:AZURE_TENANT_ID
-
+        # Login
+        az login --service-principal --username $env:AZURE_CLIENT_ID --password="$env:AZURE_CLIENT_SECRET" --tenant $env:AZURE_TENANT_ID
         az account set --subscription $env:AZURE_SUBSCRIPTION_ID
 
         $vmName = "$(VM_NAME)"
         $rg = "$(RESOURCE_GROUP)"
 
-        $status = az vm get-instance-view `
-          --name $vmName `
-          --resource-group $rg `
-          --query "instanceView.statuses[?code=='PowerState/running']" `
-          --output tsv
+        Write-Host "VM: $vmName"
+        Write-Host "RG: $rg"
 
-        if (-not $status) {
+        # Correct status check
+        $status = az vm get-instance-view --name $vmName --resource-group $rg --query "instanceView.statuses[1].displayStatus" -o tsv
+
+        Write-Host "Current Status: $status"
+
+        if ($status -ne "VM running") {
           Write-Host "Starting VM..."
           az vm start --name $vmName --resource-group $rg
         } else {
@@ -55,7 +54,6 @@ stages:
 # Stage 2: Build / Deploy
 # -------------------------
 - stage: RunPipeline
-  displayName: "Run Build & Deploy"
   dependsOn: CheckVM
   jobs:
   - job: BuildAndDeploy
@@ -67,16 +65,10 @@ stages:
         Write-Host "Worker Agent: $env:COMPUTERNAME"
         Write-Host "Running build/test/deploy..."
 
-        # Replace below with actual steps
-        Write-Host "Build..."
-        Write-Host "Test..."
-        Write-Host "Deploy..."
-
 # -------------------------
-# Stage 3: Shutdown VM
+# Stage 3: Stop VM
 # -------------------------
 - stage: ShutdownVM
-  displayName: "Shutdown Worker VM"
   dependsOn: RunPipeline
   condition: always()
 
@@ -87,18 +79,10 @@ stages:
 
     steps:
     - powershell: |
-        Write-Host "Stopping VM..."
-
-        az login --service-principal `
-          --username $env:AZURE_CLIENT_ID `
-          --password="$env:AZURE_CLIENT_SECRET" `
-          --tenant $env:AZURE_TENANT_ID
-
+        az login --service-principal --username $env:AZURE_CLIENT_ID --password="$env:AZURE_CLIENT_SECRET" --tenant $env:AZURE_TENANT_ID
         az account set --subscription $env:AZURE_SUBSCRIPTION_ID
 
-        az vm deallocate `
-          --name "$(VM_NAME)" `
-          --resource-group "$(RESOURCE_GROUP)"
+        az vm deallocate --name "$(VM_NAME)" --resource-group "$(RESOURCE_GROUP)"
 
       env:
         AZURE_CLIENT_ID: $(AZURE_CLIENT_ID)
