@@ -3,18 +3,16 @@ trigger: none
 variables:
   VM_NAME: "<your-worker-vm-name>"
   RESOURCE_GROUP: "<your-resource-group>"
-  SUBSCRIPTION_ID: "$(AZURE_SUBSCRIPTION_ID)"
 
 stages:
 
-# -------------------------
-# Stage 1: Login + Start VM
-# -------------------------
+# =========================================
+# STAGE 1: Start VM (Needs Azure Login)
+# =========================================
 - stage: CheckVM
-  displayName: "Login & Start Worker VM"
+  displayName: "Start Worker VM"
   jobs:
   - job: CheckAndStart
-    timeoutInMinutes: 15
     pool:
       name: Default
       demands:
@@ -24,23 +22,14 @@ stages:
     - powershell: |
         Write-Host "===== CONTROLLER AGENT ====="
         Write-Host "Machine: $env:COMPUTERNAME"
-        Write-Host "Agent: $env:AGENT_NAME"
 
-        # Login using Service Principal
+        # Login to Azure using Service Principal
         az login --service-principal `
           --username $env:AZURE_CLIENT_ID `
-          --password $env:AZURE_CLIENT_SECRET `
+          --password="$env:AZURE_CLIENT_SECRET" `
           --tenant $env:AZURE_TENANT_ID
 
-        if ($LASTEXITCODE -ne 0) {
-          Write-Error "Azure login failed"
-          exit 1
-        }
-
         az account set --subscription $env:AZURE_SUBSCRIPTION_ID
-
-        Write-Host "Azure context:"
-        az account show
 
         $vmName = "$(VM_NAME)"
         $rg = "$(RESOURCE_GROUP)"
@@ -54,31 +43,30 @@ stages:
           --output tsv
 
         if (-not $status) {
-          Write-Host "VM not running. Starting..."
+          Write-Host "Starting VM..."
           az vm start --name $vmName --resource-group $rg
-
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "Failed to start VM"
-            exit 1
-          }
         } else {
           Write-Host "VM already running."
         }
 
-        Write-Host "Waiting for VM boot + agent registration..."
+        Write-Host "Waiting for VM boot..."
         Start-Sleep -Seconds 120
 
-      displayName: "Login & Start VM"
+      displayName: "Start VM"
+      env:
+        AZURE_CLIENT_ID: $(AZURE_CLIENT_ID)
+        AZURE_CLIENT_SECRET: $(AZURE_CLIENT_SECRET)
+        AZURE_TENANT_ID: $(AZURE_TENANT_ID)
+        AZURE_SUBSCRIPTION_ID: $(AZURE_SUBSCRIPTION_ID)
 
-# -------------------------
-# Stage 2: Run on SHA Agent
-# -------------------------
+# =========================================
+# STAGE 2: Build / Deploy (NO Azure Login)
+# =========================================
 - stage: RunPipeline
-  displayName: "Run Workload on SHA"
+  displayName: "Run Build & Deploy"
   dependsOn: CheckVM
   jobs:
-  - job: RunOnWorker
-    timeoutInMinutes: 60
+  - job: BuildAndDeploy
     pool:
       name: SHA
       demands:
@@ -90,25 +78,18 @@ stages:
         Write-Host "Machine: $env:COMPUTERNAME"
         Write-Host "Agent: $env:AGENT_NAME"
 
-        # Login again (important: each agent is isolated)
-        az login --service-principal `
-          --username $env:AZURE_CLIENT_ID `
-          --password $env:AZURE_CLIENT_SECRET `
-          --tenant $env:AZURE_TENANT_ID
+        Write-Host "Running build and deploy logic..."
 
-        az account set --subscription $env:AZURE_SUBSCRIPTION_ID
+        # Replace with your real steps
+        Write-Host "Build..."
+        Write-Host "Test..."
+        Write-Host "Deploy..."
 
-        Write-Host "Azure context:"
-        az account show
+      displayName: "Build & Deploy"
 
-        Write-Host "Listing VMs..."
-        az vm list -o table
-
-      displayName: "Run workload"
-
-# -------------------------
-# Stage 3: Shutdown VM
-# -------------------------
+# =========================================
+# STAGE 3: Shutdown VM (Needs Azure Login)
+# =========================================
 - stage: ShutdownVM
   displayName: "Shutdown Worker VM"
   dependsOn: RunPipeline
@@ -123,14 +104,11 @@ stages:
 
     steps:
     - powershell: |
-        Write-Host "===== CLEANUP STAGE ====="
-        Write-Host "Machine: $env:COMPUTERNAME"
-        Write-Host "Agent: $env:AGENT_NAME"
+        Write-Host "===== CLEANUP ====="
 
-        # Login again
         az login --service-principal `
           --username $env:AZURE_CLIENT_ID `
-          --password $env:AZURE_CLIENT_SECRET `
+          --password="$env:AZURE_CLIENT_SECRET" `
           --tenant $env:AZURE_TENANT_ID
 
         az account set --subscription $env:AZURE_SUBSCRIPTION_ID
@@ -141,9 +119,9 @@ stages:
         Write-Host "Stopping VM..."
         az vm deallocate --name $vmName --resource-group $rg
 
-        if ($LASTEXITCODE -ne 0) {
-          Write-Error "Failed to stop VM"
-          exit 1
-        }
-
       displayName: "Shutdown VM"
+      env:
+        AZURE_CLIENT_ID: $(AZURE_CLIENT_ID)
+        AZURE_CLIENT_SECRET: $(AZURE_CLIENT_SECRET)
+        AZURE_TENANT_ID: $(AZURE_TENANT_ID)
+        AZURE_SUBSCRIPTION_ID: $(AZURE_SUBSCRIPTION_ID)
