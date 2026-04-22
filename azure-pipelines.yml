@@ -6,24 +6,20 @@ variables:
 
 stages:
 
-# =========================================
-# STAGE 1: Start VM (Needs Azure Login)
-# =========================================
+# -------------------------
+# Stage 1: Start Worker VM
+# -------------------------
 - stage: CheckVM
   displayName: "Start Worker VM"
   jobs:
   - job: CheckAndStart
     pool:
       name: Default
-      demands:
-        - Agent.Name -equals test-vm
 
     steps:
     - powershell: |
-        Write-Host "===== CONTROLLER AGENT ====="
-        Write-Host "Machine: $env:COMPUTERNAME"
+        Write-Host "Controller Agent: $env:COMPUTERNAME"
 
-        # Login to Azure using Service Principal
         az login --service-principal `
           --username $env:AZURE_CLIENT_ID `
           --password="$env:AZURE_CLIENT_SECRET" `
@@ -33,8 +29,6 @@ stages:
 
         $vmName = "$(VM_NAME)"
         $rg = "$(RESOURCE_GROUP)"
-
-        Write-Host "Checking VM status..."
 
         $status = az vm get-instance-view `
           --name $vmName `
@@ -49,19 +43,17 @@ stages:
           Write-Host "VM already running."
         }
 
-        Write-Host "Waiting for VM boot..."
         Start-Sleep -Seconds 120
 
-      displayName: "Start VM"
       env:
         AZURE_CLIENT_ID: $(AZURE_CLIENT_ID)
         AZURE_CLIENT_SECRET: $(AZURE_CLIENT_SECRET)
         AZURE_TENANT_ID: $(AZURE_TENANT_ID)
         AZURE_SUBSCRIPTION_ID: $(AZURE_SUBSCRIPTION_ID)
 
-# =========================================
-# STAGE 2: Build / Deploy (NO Azure Login)
-# =========================================
+# -------------------------
+# Stage 2: Build / Deploy
+# -------------------------
 - stage: RunPipeline
   displayName: "Run Build & Deploy"
   dependsOn: CheckVM
@@ -69,27 +61,20 @@ stages:
   - job: BuildAndDeploy
     pool:
       name: SHA
-      demands:
-        - Agent.Name -equals test-vms
 
     steps:
     - powershell: |
-        Write-Host "===== WORKER AGENT ====="
-        Write-Host "Machine: $env:COMPUTERNAME"
-        Write-Host "Agent: $env:AGENT_NAME"
+        Write-Host "Worker Agent: $env:COMPUTERNAME"
+        Write-Host "Running build/test/deploy..."
 
-        Write-Host "Running build and deploy logic..."
-
-        # Replace with your real steps
+        # Replace below with actual steps
         Write-Host "Build..."
         Write-Host "Test..."
         Write-Host "Deploy..."
 
-      displayName: "Build & Deploy"
-
-# =========================================
-# STAGE 3: Shutdown VM (Needs Azure Login)
-# =========================================
+# -------------------------
+# Stage 3: Shutdown VM
+# -------------------------
 - stage: ShutdownVM
   displayName: "Shutdown Worker VM"
   dependsOn: RunPipeline
@@ -99,12 +84,10 @@ stages:
   - job: StopVM
     pool:
       name: Default
-      demands:
-        - Agent.Name -equals test-vm
 
     steps:
     - powershell: |
-        Write-Host "===== CLEANUP ====="
+        Write-Host "Stopping VM..."
 
         az login --service-principal `
           --username $env:AZURE_CLIENT_ID `
@@ -113,13 +96,10 @@ stages:
 
         az account set --subscription $env:AZURE_SUBSCRIPTION_ID
 
-        $vmName = "$(VM_NAME)"
-        $rg = "$(RESOURCE_GROUP)"
+        az vm deallocate `
+          --name "$(VM_NAME)" `
+          --resource-group "$(RESOURCE_GROUP)"
 
-        Write-Host "Stopping VM..."
-        az vm deallocate --name $vmName --resource-group $rg
-
-      displayName: "Shutdown VM"
       env:
         AZURE_CLIENT_ID: $(AZURE_CLIENT_ID)
         AZURE_CLIENT_SECRET: $(AZURE_CLIENT_SECRET)
