@@ -1,9 +1,5 @@
 trigger: none
 
-variables:
-  VM_NAME: $(VM_NAME)
-  RESOURCE_GROUP: $(RESOURCE_GROUP)
-
 stages:
 # Stage 1: Start VM + Wait for Readiness
 
