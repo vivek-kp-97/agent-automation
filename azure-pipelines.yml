@@ -1,8 +1,10 @@
 trigger: none
 
 stages:
-# Stage 1: Start VM + Wait for Readiness
 
+# -------------------------
+# Stage 1: Start VM + Wait for Readiness
+# -------------------------
 - stage: CheckVM
   displayName: "Start VM and Wait for Agent"
   jobs:
@@ -22,7 +24,12 @@ stages:
           exit 1
         }
 
-        Write-Host "Logging into Azure..."
+        Write-Host "Using VM: $vmName"
+        Write-Host "Resource Group: $rg"
+
+        # -------------------------
+        # Azure Login
+        # -------------------------
         az login --service-principal `
           --username $env:AZURE_CLIENT_ID `
           --password="$env:AZURE_CLIENT_SECRET" `
@@ -30,7 +37,9 @@ stages:
 
         az account set --subscription $env:AZURE_SUBSCRIPTION_ID
 
-        Write-Host "Checking VM status..."
+        # -------------------------
+        # Check VM Status
+        # -------------------------
         $status = az vm get-instance-view `
           --name $vmName `
           --resource-group $rg `
@@ -45,7 +54,11 @@ stages:
           Write-Host "VM already running."
         }
 
+        # -------------------------
+        # Wait for VM Running
+        # -------------------------
         Write-Host "Waiting for VM to be in running state..."
+
         $maxAttempts = 60
         $attempt = 0
 
@@ -67,34 +80,54 @@ stages:
           exit 1
         }
 
-        Write-Host "VM is running"
+        Write-Host "VM is running ✅"
 
+        # -------------------------
+        # OS Stabilization Wait
+        # -------------------------
+        Write-Host "Waiting for OS to fully boot..."
+        Start-Sleep -Seconds 60
+
+        # -------------------------
+        # Check Agent Service (Safe Retry)
+        # -------------------------
         Write-Host "Checking Azure DevOps agent service..."
 
-        $maxAttempts = 30
+        $maxAttempts = 20
         $attempt = 0
+        $agentReady = $false
 
         do {
-          Start-Sleep -Seconds 10
+          Start-Sleep -Seconds 15
           $attempt++
 
-          $result = az vm run-command invoke `
-            --resource-group $rg `
-            --name $vmName `
-            --command-id RunPowerShellScript `
-            --scripts "Get-Service vstsagent* | Select -ExpandProperty Status" `
-            --query "value[0].message" -o tsv
+          try {
+            $result = az vm run-command invoke `
+              --resource-group $rg `
+              --name $vmName `
+              --command-id RunPowerShellScript `
+              --scripts "Get-Service vstsagent* | Select -ExpandProperty Status" `
+              --query "value[0].message" -o tsv `
+              --only-show-errors
 
-          Write-Host "Attempt $attempt : Agent Status = $result"
+            Write-Host "Attempt $attempt : Agent Status = $result"
 
-        } while ($result -notmatch "Running" -and $attempt -lt $maxAttempts)
+            if ($result -match "Running") {
+              $agentReady = $true
+            }
 
-        if ($result -notmatch "Running") {
+          } catch {
+            Write-Host "Attempt $attempt : VM Agent not ready yet..."
+          }
+
+        } while (-not $agentReady -and $attempt -lt $maxAttempts)
+
+        if (-not $agentReady) {
           Write-Error "Agent is not running"
           exit 1
         }
 
-        Write-Host "Agent is ONLINE "
+        Write-Host "Agent is ONLINE ✅"
 
       env:
         AZURE_CLIENT_ID: $(AZURE_CLIENT_ID)
@@ -102,8 +135,9 @@ stages:
         AZURE_TENANT_ID: $(AZURE_TENANT_ID)
         AZURE_SUBSCRIPTION_ID: $(AZURE_SUBSCRIPTION_ID)
 
-
+# -------------------------
 # Stage 2: Run Workload on SHA Agent
+# -------------------------
 - stage: RunPipeline
   displayName: "Run Workload on SHA Agent"
   dependsOn: CheckVM
@@ -116,12 +150,13 @@ stages:
     steps:
     - powershell: |
         Write-Host "Worker Agent: $env:COMPUTERNAME"
-        Write-Host "Pipeline execution started on SHA agent "
+        Write-Host "Pipeline execution started on SHA agent ✅"
 
-
-# Stage 3: Graceful Shutdown
+# -------------------------
+# Stage 3: Graceful Shutdown (NO DEALLOCATE)
+# -------------------------
 - stage: ShutdownVM
-  displayName: "Shutdown VM"
+  displayName: "Soft Shutdown VM"
   dependsOn: RunPipeline
   condition: always()
 
@@ -141,10 +176,16 @@ stages:
 
         az account set --subscription $env:AZURE_SUBSCRIPTION_ID
 
-        Write-Host "Stopping VM..."
-        az vm deallocate --name "$(VM_NAME)" --resource-group "$(RESOURCE_GROUP)"
+        Write-Host "Sending graceful shutdown command to VM..."
 
-        Write-Host "VM stopped "
+        az vm run-command invoke `
+          --resource-group "$(RESOURCE_GROUP)" `
+          --name "$(VM_NAME)" `
+          --command-id RunPowerShellScript `
+          --scripts "Stop-Computer -Force" `
+          --only-show-errors
+
+        Write-Host "Shutdown command sent successfully ✅"
 
       env:
         AZURE_CLIENT_ID: $(AZURE_CLIENT_ID)
