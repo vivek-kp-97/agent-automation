@@ -32,7 +32,7 @@ stages:
 
         if ($status -ne "VM running") {
           Write-Host "Starting VM..."
-          az vm start --name $vmName --resource-group $rg
+          az vm start --name $vmName --resource-group $rg --no-wait
         } else {
           Write-Host "VM already running."
         }
