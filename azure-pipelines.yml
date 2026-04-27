@@ -2,9 +2,8 @@ trigger: none
 
 stages:
 
-# -------------------------
 # Stage 1: Start VM + Wait for Readiness
-# -------------------------
+
 - stage: CheckVM
   displayName: "Start VM and Wait for Agent"
   jobs:
@@ -80,7 +79,7 @@ stages:
           exit 1
         }
 
-        Write-Host "VM is running ✅"
+        Write-Host "VM is running"
 
         # -------------------------
         # OS Stabilization Wait
@@ -127,7 +126,7 @@ stages:
           exit 1
         }
 
-        Write-Host "Agent is ONLINE ✅"
+        Write-Host "Agent is ONLINE"
 
       env:
         AZURE_CLIENT_ID: $(AZURE_CLIENT_ID)
@@ -135,9 +134,9 @@ stages:
         AZURE_TENANT_ID: $(AZURE_TENANT_ID)
         AZURE_SUBSCRIPTION_ID: $(AZURE_SUBSCRIPTION_ID)
 
-# -------------------------
+
 # Stage 2: Run Workload on SHA Agent
-# -------------------------
+
 - stage: RunPipeline
   displayName: "Run Workload on SHA Agent"
   dependsOn: CheckVM
@@ -150,11 +149,9 @@ stages:
     steps:
     - powershell: |
         Write-Host "Worker Agent: $env:COMPUTERNAME"
-        Write-Host "Pipeline execution started on SHA agent ✅"
+        Write-Host "Pipeline execution started on SHA agent"
 
-# -------------------------
 # Stage 3: Graceful Shutdown (NO DEALLOCATE)
-# -------------------------
 - stage: ShutdownVM
   displayName: "Soft Shutdown VM"
   dependsOn: RunPipeline
